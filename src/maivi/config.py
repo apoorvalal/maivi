@@ -4,7 +4,7 @@ Handles settings persistence and loading.
 """
 import json
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from platformdirs import user_config_dir
 
 
@@ -23,6 +23,9 @@ class Config:
         "clear_clipboard_after_paste": False,  # Clear clipboard after auto-paste
         "audio_device": None,  # None = default device, or device index/name
         "theme": "auto",  # auto/light/dark
+        "show_overlay": True,  # Show the overlay window
+        "overlay_auto_hide_seconds": 3.0,  # Auto-hide overlay after N seconds (0 = never hide)
+        "show_notifications": False,  # Show system notifications when transcription is done
     }
 
     def __init__(self):

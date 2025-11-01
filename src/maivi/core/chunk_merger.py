@@ -105,7 +105,7 @@ class SimpleChunkMerger:
 
         # If still no overlap (shouldn't happen with 4s overlap), just append with separator
         if not overlap_found:
-            print(f"⚠️  Warning: No overlap found, appending with gap marker")
+            print("⚠️  Warning: No overlap found, appending with gap marker")
             self.result = self.result.strip() + " ... " + text
 
         self.last_chunk_text = text

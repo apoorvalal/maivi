@@ -2,12 +2,11 @@
 Settings dialog for Maivi configuration.
 """
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QDoubleSpinBox, QSpinBox, QCheckBox,
+    QDialog, QVBoxLayout, QLabel, QLineEdit,
+    QDoubleSpinBox, QSpinBox, QCheckBox,
     QGroupBox, QFormLayout, QDialogButtonBox, QMessageBox, QComboBox
 )
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QKeySequence
 from maivi import __version__
 import sounddevice as sd
 
@@ -239,6 +238,22 @@ class SettingsDialog(QDialog):
         self.theme_combo.setToolTip("Choose UI theme (Auto follows system theme)")
         appearance_layout.addRow("Theme:", self.theme_combo)
 
+        self.show_overlay_check = QCheckBox()
+        self.show_overlay_check.setToolTip("Show the overlay window with live transcription")
+        appearance_layout.addRow("Show Overlay:", self.show_overlay_check)
+
+        self.overlay_auto_hide_spin = QDoubleSpinBox()
+        self.overlay_auto_hide_spin.setRange(0.0, 60.0)
+        self.overlay_auto_hide_spin.setSingleStep(0.5)
+        self.overlay_auto_hide_spin.setSuffix(" seconds")
+        self.overlay_auto_hide_spin.setSpecialValueText("Never hide")
+        self.overlay_auto_hide_spin.setToolTip("Auto-hide overlay after N seconds when not recording (0 = never hide)")
+        appearance_layout.addRow("Overlay Auto-hide:", self.overlay_auto_hide_spin)
+
+        self.show_notifications_check = QCheckBox()
+        self.show_notifications_check.setToolTip("Show system notifications when transcription is complete")
+        appearance_layout.addRow("Show Notifications:", self.show_notifications_check)
+
         appearance_group.setLayout(appearance_layout)
         layout.addWidget(appearance_group)
 
@@ -310,6 +325,11 @@ class SettingsDialog(QDialog):
         theme_index = {"auto": 0, "light": 1, "dark": 2}.get(theme, 0)
         self.theme_combo.setCurrentIndex(theme_index)
 
+        # Load overlay settings
+        self.show_overlay_check.setChecked(self.config.get("show_overlay", True))
+        self.overlay_auto_hide_spin.setValue(self.config.get("overlay_auto_hide_seconds", 3.0))
+        self.show_notifications_check.setChecked(self.config.get("show_notifications", False))
+
     def save_settings(self):
         """Save settings from UI to config and emit changes."""
         # Get old values to detect changes
@@ -332,6 +352,11 @@ class SettingsDialog(QDialog):
         theme_map = {0: "auto", 1: "light", 2: "dark"}
         theme = theme_map.get(self.theme_combo.currentIndex(), "auto")
         self.config.set("theme", theme)
+
+        # Save overlay settings
+        self.config.set("show_overlay", self.show_overlay_check.isChecked())
+        self.config.set("overlay_auto_hide_seconds", self.overlay_auto_hide_spin.value())
+        self.config.set("show_notifications", self.show_notifications_check.isChecked())
 
         self.config.save()
 

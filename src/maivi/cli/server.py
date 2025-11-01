@@ -5,7 +5,6 @@ Processes audio chunks as they're recorded using a sliding window.
 import os
 import time
 import threading
-from pathlib import Path
 
 import nemo.collections.asr as nemo_asr
 import pyperclip
@@ -101,7 +100,7 @@ class StreamingSTTServer:
                 app_name='STT Server',
                 timeout=timeout  # seconds
             )
-        except Exception as e:
+        except Exception:
             # Silently fail if notifications don't work
             pass
 
@@ -215,14 +214,14 @@ class StreamingSTTServer:
             return
 
         print(f"\n{'=' * 60}")
-        print(f"📝 Final Transcription:")
+        print("📝 Final Transcription:")
         print(f"{'=' * 60}")
         print(final_text)
         print(f"{'=' * 60}\n")
 
         # Copy to clipboard
         pyperclip.copy(final_text)
-        print(f"✓ Copied to clipboard")
+        print("✓ Copied to clipboard")
 
         # Show notification IMMEDIATELY - don't wait!
         preview = final_text[:50] + "..." if len(final_text) > 50 else final_text
@@ -242,7 +241,7 @@ class StreamingSTTServer:
             self.keyboard_controller.press("v")
             self.keyboard_controller.release("v")
             self.keyboard_controller.release(Key.ctrl)
-            print(f"✓ Auto-pasted")
+            print("✓ Auto-pasted")
 
         print()
 
@@ -350,7 +349,7 @@ class StreamingSTTServer:
 
                     # Copy to clipboard immediately
                     pyperclip.copy(text)
-                    print(f"✓ Copied to clipboard")
+                    print("✓ Copied to clipboard")
 
                     # Show notification RIGHT AWAY
                     preview = text[:50] + "..." if len(text) > 50 else text
@@ -367,7 +366,7 @@ class StreamingSTTServer:
                         self.keyboard_controller.press("v")
                         self.keyboard_controller.release("v")
                         self.keyboard_controller.release(Key.ctrl)
-                        print(f"✓ Auto-pasted")
+                        print("✓ Auto-pasted")
                 else:
                     print("No text transcribed")
                     self._show_notification("STT Server", "No text transcribed", timeout=2)
@@ -449,12 +448,12 @@ class StreamingSTTServer:
         print(f"Overlap: {self.recorder.window_seconds - self.recorder.slide_seconds}s (for merging)")
         print(f"Start delay: {self.recorder.start_delay_seconds}s")
         if self.toggle_mode:
-            print(f"Hotkey: Alt+Q (Option+Q on macOS) - press once to start, again to stop")
+            print("Hotkey: Alt+Q (Option+Q on macOS) - press once to start, again to stop")
         else:
-            print(f"Hotkey: Alt+Q (Option+Q on macOS) - hold to record")
+            print("Hotkey: Alt+Q (Option+Q on macOS) - hold to record")
         if self.output_file:
             print(f"Output file: {self.output_file} (streaming)")
-        print(f"Exit: Press Esc")
+        print("Exit: Press Esc")
         print("=" * 60)
 
         # Load model
@@ -463,9 +462,9 @@ class StreamingSTTServer:
         # Start keyboard listener
         try:
             if self.toggle_mode:
-                print(f"\n✓ Ready! Press Alt+Q (Option+Q on macOS) once to start recording.")
+                print("\n✓ Ready! Press Alt+Q (Option+Q on macOS) once to start recording.")
             else:
-                print(f"\n✓ Ready! Hold Alt+Q (Option+Q on macOS) to start recording.")
+                print("\n✓ Ready! Hold Alt+Q (Option+Q on macOS) to start recording.")
             print(f"  Streaming will start after {self.recorder.start_delay_seconds}s\n")
 
             with keyboard.Listener(

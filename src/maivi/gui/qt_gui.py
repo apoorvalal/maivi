@@ -9,7 +9,7 @@ import threading
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication, QWidget, QLabel, QHBoxLayout, QSystemTrayIcon, QMenu
-from PySide6.QtCore import Qt, QTimer, Signal, QObject, QThread
+from PySide6.QtCore import Qt, Signal, QObject, QTimer
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QFontDatabase
 
 import nemo.collections.asr as nemo_asr
@@ -93,13 +93,19 @@ class TranscriptionSignals(QObject):
 class TranscriptionOverlay(QWidget):
     """Small overlay window showing scrolling transcription near taskbar."""
 
-    def __init__(self, width=400, height=60, hotkey="alt+q", theme="auto"):
+    def __init__(self, width=400, height=60, hotkey="alt+q", theme="auto", auto_hide_seconds=3.0):
         super().__init__()
         self.width = width
         self.height = height
         self.recording = False
         self.hotkey = hotkey
         self.theme = theme
+        self.auto_hide_seconds = auto_hide_seconds
+
+        # Auto-hide timer
+        self.hide_timer = QTimer(self)
+        self.hide_timer.timeout.connect(self._auto_hide)
+        self.hide_timer.setSingleShot(True)
 
         # Setup window
         self.setWindowTitle("STT Live")
@@ -201,25 +207,51 @@ class TranscriptionOverlay(QWidget):
         self.theme = theme
         self._apply_theme()
 
+    def set_auto_hide_seconds(self, seconds):
+        """Update auto-hide timeout."""
+        self.auto_hide_seconds = seconds
+
+    def _auto_hide(self):
+        """Hide the overlay window."""
+        if not self.recording:
+            self.hide()
+
+    def _schedule_auto_hide(self):
+        """Schedule auto-hide if enabled."""
+        if self.auto_hide_seconds > 0 and not self.recording:
+            self.hide_timer.start(int(self.auto_hide_seconds * 1000))
+
     def set_recording(self, is_recording):
         """Update recording indicator."""
         self.recording = is_recording
         if is_recording:
+            # Stop auto-hide timer and show window
+            self.hide_timer.stop()
+            self.show()
             self.status_label.setText("●")
             self.status_label.setStyleSheet(f"color: {self.accent_color};")
             self.text_label.setText("🎤 Listening...")
         else:
             self.status_label.setText("○")
             self.status_label.setStyleSheet(f"color: {self.status_inactive_color};")
+            # Schedule auto-hide when recording stops
+            self._schedule_auto_hide()
 
     def update_text(self, text, word_count=0):
         """Update scrolling text (last 50 chars)."""
+        # Show window when text is updated
+        self.show()
+
         display_text = text[-50:] if len(text) > 50 else text
         self.text_label.setText(display_text or f"Ready - Press {self.hotkey.upper()} to record")
         if word_count > 0:
             self.count_label.setText(f"{word_count}w")
         else:
             self.count_label.setText("")
+
+        # Schedule auto-hide after text update (unless recording)
+        if not self.recording:
+            self._schedule_auto_hide()
 
 
 class QtSTTServer(QObject):
@@ -258,9 +290,12 @@ class QtSTTServer(QObject):
         self.hotkey = self.config.get("hotkey", "alt+q")
         self.hotkey_parts = self._parse_hotkey(self.hotkey)
 
-        # Get theme and audio device from config
+        # Get theme, audio device, and overlay settings from config
         self.theme = self.config.get("theme", "auto")
         self.audio_device = self.config.get("audio_device", None)
+        self.show_overlay = self.config.get("show_overlay", True)
+        self.overlay_auto_hide_seconds = self.config.get("overlay_auto_hide_seconds", 3.0)
+        self.show_notifications = self.config.get("show_notifications", False)
 
         # Model and recorder
         self.model = None
@@ -511,6 +546,28 @@ class QtSTTServer(QObject):
                 self.overlay.set_theme(self.theme)
             print(f"✓ Theme updated to: {self.theme}")
 
+        # Apply overlay visibility changes
+        if "show_overlay" in changed_settings:
+            self.show_overlay = changed_settings["show_overlay"]
+            if self.overlay:
+                if self.show_overlay:
+                    self.overlay.show()
+                else:
+                    self.overlay.hide()
+            print(f"✓ Show overlay: {self.show_overlay}")
+
+        # Apply overlay auto-hide changes
+        if "overlay_auto_hide_seconds" in changed_settings:
+            self.overlay_auto_hide_seconds = changed_settings["overlay_auto_hide_seconds"]
+            if self.overlay:
+                self.overlay.set_auto_hide_seconds(self.overlay_auto_hide_seconds)
+            print(f"✓ Overlay auto-hide: {self.overlay_auto_hide_seconds}s")
+
+        # Apply notification changes
+        if "show_notifications" in changed_settings:
+            self.show_notifications = changed_settings["show_notifications"]
+            print(f"✓ Show notifications: {self.show_notifications}")
+
         # Apply audio device changes
         if "audio_device" in changed_settings:
             self.audio_device = changed_settings["audio_device"]
@@ -686,7 +743,7 @@ class QtSTTServer(QObject):
                     pyperclip.copy(text)
                     self.signals.update_text.emit(f"✓ Copied: {text}", len(text.split()))
 
-                    if NOTIFICATIONS_AVAILABLE:
+                    if NOTIFICATIONS_AVAILABLE and self.show_notifications:
                         try:
                             preview = text[:50] + "..." if len(text) > 50 else text
                             notification.notify(
@@ -755,7 +812,7 @@ class QtSTTServer(QObject):
                 pyperclip.copy(final_text)
                 self.signals.update_text.emit(f"✓ Copied: {final_text}", len(final_text.split()))
 
-                if NOTIFICATIONS_AVAILABLE:
+                if NOTIFICATIONS_AVAILABLE and self.show_notifications:
                     try:
                         preview = final_text[:50] + "..." if len(final_text) > 50 else final_text
                         notification.notify(
@@ -828,8 +885,16 @@ class QtSTTServer(QObject):
         self.app = QApplication(sys.argv)
 
         # Create overlay window
-        self.overlay = TranscriptionOverlay(hotkey=self.hotkey, theme=self.theme)
-        self.overlay.show()
+        self.overlay = TranscriptionOverlay(
+            hotkey=self.hotkey,
+            theme=self.theme,
+            auto_hide_seconds=self.overlay_auto_hide_seconds
+        )
+        if self.show_overlay:
+            self.overlay.show()
+        else:
+            # Keep overlay created but hidden (so it can be shown from settings)
+            self.overlay.hide()
 
         # Load model in background
         model_thread = threading.Thread(target=self.load_model, daemon=True)
@@ -885,7 +950,6 @@ class QtSTTServer(QObject):
 
         # Show recording retention policy and directory location
         from platformdirs import user_data_dir
-        from pathlib import Path
         recordings_dir = Path(user_data_dir("maivi", "MaximeRivest")) / "recordings"
 
         if self.keep_recordings == 0:

@@ -4,7 +4,6 @@ Shows scrolling text in terminal as transcription happens.
 """
 import threading
 import sys
-import time
 
 
 class StreamingUITerminal:

@@ -138,7 +138,7 @@ For more info: https://github.com/MaximeRivest/maivi
             print(f"❌ Error: File not found: {wav_file}")
             sys.exit(1)
 
-        print(f"\n🎤 Maivi - Reprocessing mode")
+        print("\n🎤 Maivi - Reprocessing mode")
         print(f"   File: {wav_file}\n")
         print("📥 Loading AI model...")
 

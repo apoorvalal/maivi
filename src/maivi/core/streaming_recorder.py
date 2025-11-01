@@ -3,7 +3,6 @@ Streaming audio recorder with sliding window processing.
 Processes audio chunks in real-time during recording.
 """
 import wave
-import threading
 import queue
 import time
 import numpy as np
