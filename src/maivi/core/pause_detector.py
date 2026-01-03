@@ -1,16 +1,16 @@
 """
 Pause detection for creating paragraph breaks in transcription.
 """
+
 import numpy as np
 
 
 class PauseDetector:
     """Detect pauses/silence in audio for paragraph formatting."""
 
-    def __init__(self,
-                 silence_threshold_db=-40.0,
-                 min_pause_duration=1.0,
-                 sample_rate=16000):
+    def __init__(
+        self, silence_threshold_db=-40.0, min_pause_duration=1.0, sample_rate=16000
+    ):
         """
         Args:
             silence_threshold_db: Audio level below this is considered silence (dB)
@@ -24,7 +24,7 @@ class PauseDetector:
 
     def _calculate_db(self, audio_chunk):
         """Calculate RMS amplitude in dB."""
-        rms = np.sqrt(np.mean(audio_chunk ** 2))
+        rms = np.sqrt(np.mean(audio_chunk**2))
         if rms == 0:
             return -100.0  # Very quiet
         return 20 * np.log10(rms)
@@ -66,7 +66,7 @@ class PauseDetector:
         pause_start = None
 
         while i < len(audio_data):
-            chunk = audio_data[i:i + chunk_samples]
+            chunk = audio_data[i : i + chunk_samples]
             if len(chunk) < chunk_samples:
                 break
 

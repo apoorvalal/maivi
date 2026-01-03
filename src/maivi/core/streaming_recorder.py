@@ -2,6 +2,7 @@
 Streaming audio recorder with sliding window processing.
 Processes audio chunks in real-time during recording.
 """
+
 import wave
 import queue
 import time
@@ -126,7 +127,9 @@ class StreamingRecorder:
             )
             print("   You may need to restart Maivi after granting permission.")
         elif sys.platform.startswith("linux"):
-            print("   Ensure your user has access to the audio input device (check ALSA/Pulse).")
+            print(
+                "   Ensure your user has access to the audio input device (check ALSA/Pulse)."
+            )
 
     def _audio_callback(self, indata, frames, time_info, status):
         """Callback for audio stream - runs in separate thread."""
@@ -141,7 +144,9 @@ class StreamingRecorder:
 
         if self.channels > 1:
             # Collapse multi-channel audio to mono
-            audio_np = audio_np.reshape(-1, self.channels).mean(axis=1).astype(self.np_dtype)
+            audio_np = (
+                audio_np.reshape(-1, self.channels).mean(axis=1).astype(self.np_dtype)
+            )
         else:
             audio_np = audio_np.reshape(-1)
 
@@ -233,7 +238,9 @@ class StreamingRecorder:
 
         # Apply speed adjustment if needed (skip if speed is effectively 1.0)
         if abs(self.speed - 1.0) > 0.001:
-            print(f"⚡ Applying {self.speed}x speed adjustment to complete recording...")
+            print(
+                f"⚡ Applying {self.speed}x speed adjustment to complete recording..."
+            )
             original_duration = len(audio_float) / self.sample_rate
             audio_float = librosa.effects.time_stretch(audio_float, rate=self.speed)
             new_duration = len(audio_float) / self.sample_rate
@@ -293,7 +300,7 @@ class StreamingRecorder:
             recording_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
 
             # Delete files beyond keep_recordings
-            files_to_delete = recording_files[self.keep_recordings:]
+            files_to_delete = recording_files[self.keep_recordings :]
 
             for file_path in files_to_delete:
                 try:

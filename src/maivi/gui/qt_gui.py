@@ -2,17 +2,24 @@
 Qt-based STT Server with system tray and overlay window.
 Cross-platform: Windows, macOS, Linux (proper threading support)
 """
+
 import os
 import sys
 import time
 import threading
 from pathlib import Path
 
-from PySide6.QtWidgets import QApplication, QWidget, QLabel, QHBoxLayout, QSystemTrayIcon, QMenu
+from PySide6.QtWidgets import (
+    QApplication,
+    QWidget,
+    QLabel,
+    QHBoxLayout,
+    QSystemTrayIcon,
+    QMenu,
+)
 from PySide6.QtCore import Qt, Signal, QObject, QTimer
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QFontDatabase
 
-import nemo.collections.asr as nemo_asr
 import pyperclip
 import soundfile as sf
 from pynput import keyboard
@@ -24,6 +31,7 @@ from maivi.utils.macos_permissions import (
     ensure_accessibility_permissions,
     open_system_settings_privacy,
 )
+from maivi.utils.torch_jit import disable_torch_jit
 from maivi.config import Config
 from maivi.gui.settings_dialog import SettingsDialog
 from maivi.gui.recordings_dialog import RecordingsDialog
@@ -31,39 +39,45 @@ from maivi import __version__
 
 # Cross-platform notifications
 import platform
+
 NOTIFICATIONS_AVAILABLE = False
 notification = None
 
 
 def detect_system_theme():
     """Detect system theme (light/dark) on macOS, returns 'light' or 'dark'."""
-    if platform.system() == 'Darwin':
+    if platform.system() == "Darwin":
         try:
             import subprocess
+
             result = subprocess.run(
-                ['defaults', 'read', '-g', 'AppleInterfaceStyle'],
+                ["defaults", "read", "-g", "AppleInterfaceStyle"],
                 capture_output=True,
                 text=True,
-                check=False
+                check=False,
             )
             # If the command succeeds and returns "Dark", system is in dark mode
-            if result.returncode == 0 and 'Dark' in result.stdout:
-                return 'dark'
+            if result.returncode == 0 and "Dark" in result.stdout:
+                return "dark"
             else:
-                return 'light'
+                return "light"
         except Exception:
-            return 'light'  # Default to light if detection fails
+            return "light"  # Default to light if detection fails
     # For other platforms, default to light (can be extended later)
-    return 'light'
+    return "light"
+
 
 # Try to use macOS native notifications first
-if platform.system() == 'Darwin':
+if platform.system() == "Darwin":
     try:
         import subprocess
+
         def _macos_notify(title, message, timeout=10):
             """Use macOS native osascript for notifications"""
             script = f'display notification "{message}" with title "{title}"'
-            subprocess.run(['osascript', '-e', script], check=False, capture_output=True)
+            subprocess.run(
+                ["osascript", "-e", script], check=False, capture_output=True
+            )
 
         class MacOSNotification:
             @staticmethod
@@ -79,6 +93,7 @@ if platform.system() == 'Darwin':
 if not NOTIFICATIONS_AVAILABLE:
     try:
         from plyer import notification
+
         NOTIFICATIONS_AVAILABLE = True
     except ImportError:
         NOTIFICATIONS_AVAILABLE = False
@@ -86,6 +101,7 @@ if not NOTIFICATIONS_AVAILABLE:
 
 class TranscriptionSignals(QObject):
     """Signals for thread-safe GUI updates."""
+
     update_text = Signal(str, int)  # text, word_count
     set_recording = Signal(bool)
 
@@ -93,7 +109,14 @@ class TranscriptionSignals(QObject):
 class TranscriptionOverlay(QWidget):
     """Small overlay window showing scrolling transcription near taskbar."""
 
-    def __init__(self, width=400, height=60, hotkey="alt+q", theme="auto", auto_hide_seconds=3.0):
+    def __init__(
+        self,
+        width=400,
+        height=60,
+        hotkey="super+alt+space",
+        theme="auto",
+        auto_hide_seconds=3.0,
+    ):
         super().__init__()
         self.width = width
         self.height = height
@@ -110,9 +133,9 @@ class TranscriptionOverlay(QWidget):
         # Setup window
         self.setWindowTitle("STT Live")
         self.setWindowFlags(
-            Qt.WindowStaysOnTopHint |
-            Qt.FramelessWindowHint |
-            Qt.Tool  # Don't show in taskbar
+            Qt.WindowStaysOnTopHint
+            | Qt.FramelessWindowHint
+            | Qt.Tool  # Don't show in taskbar
         )
         self.setAttribute(Qt.WA_TranslucentBackground, False)
 
@@ -126,7 +149,7 @@ class TranscriptionOverlay(QWidget):
 
         # Status indicator
         self.status_label = QLabel("○")
-        self.status_label.setFont(QFont('Arial', 14, QFont.Bold))
+        self.status_label.setFont(QFont("Arial", 14, QFont.Bold))
         layout.addWidget(self.status_label)
 
         # Text display
@@ -139,7 +162,7 @@ class TranscriptionOverlay(QWidget):
 
         # Word count
         self.count_label = QLabel("")
-        self.count_label.setFont(QFont('Arial', 9))
+        self.count_label.setFont(QFont("Arial", 9))
         layout.addWidget(self.count_label)
 
         self.setLayout(layout)
@@ -162,20 +185,20 @@ class TranscriptionOverlay(QWidget):
         # Zen theme colors
         if actual_theme == "dark":
             # Dark theme - softer colors
-            self.bg_color = '#2D2D2D'
-            self.text_color = '#E0E0E0'
-            self.accent_color = '#FF6B6B'
-            self.border_color = '#404040'
-            self.status_inactive_color = '#666666'
-            self.count_color = '#999999'
+            self.bg_color = "#2D2D2D"
+            self.text_color = "#E0E0E0"
+            self.accent_color = "#FF6B6B"
+            self.border_color = "#404040"
+            self.status_inactive_color = "#666666"
+            self.count_color = "#999999"
         else:
             # Light theme - clean and minimal
-            self.bg_color = '#FFFFFF'
-            self.text_color = '#333333'
-            self.accent_color = '#FF6B6B'
-            self.border_color = '#E0E0E0'
-            self.status_inactive_color = '#CCCCCC'
-            self.count_color = '#777777'
+            self.bg_color = "#FFFFFF"
+            self.text_color = "#333333"
+            self.accent_color = "#FF6B6B"
+            self.border_color = "#E0E0E0"
+            self.status_inactive_color = "#CCCCCC"
+            self.count_color = "#777777"
 
         # Apply stylesheet
         self.setStyleSheet(f"""
@@ -192,14 +215,14 @@ class TranscriptionOverlay(QWidget):
         """)
 
         # Update status label color if already initialized
-        if hasattr(self, 'status_label'):
+        if hasattr(self, "status_label"):
             if self.recording:
                 self.status_label.setStyleSheet(f"color: {self.accent_color};")
             else:
                 self.status_label.setStyleSheet(f"color: {self.status_inactive_color};")
 
         # Update count label color if already initialized
-        if hasattr(self, 'count_label'):
+        if hasattr(self, "count_label"):
             self.count_label.setStyleSheet(f"color: {self.count_color};")
 
     def set_theme(self, theme):
@@ -243,7 +266,9 @@ class TranscriptionOverlay(QWidget):
         self.show()
 
         display_text = text[-50:] if len(text) > 50 else text
-        self.text_label.setText(display_text or f"Ready - Press {self.hotkey.upper()} to record")
+        self.text_label.setText(
+            display_text or f"Ready - Press {self.hotkey.upper()} to record"
+        )
         if word_count > 0:
             self.count_label.setText(f"{word_count}w")
         else:
@@ -261,7 +286,7 @@ class QtSTTServer(QObject):
         self,
         auto_paste=False,
         window_seconds=7.0,  # Chunk size (context window)
-        slide_seconds=3.0,   # Slide interval (4s overlap for merging)
+        slide_seconds=3.0,  # Slide interval (4s overlap for merging)
         start_delay_seconds=2.0,
         speed=1.0,
         toggle_mode=True,
@@ -277,28 +302,58 @@ class QtSTTServer(QObject):
 
         # Use passed parameters if they differ from defaults, otherwise use config
         # This allows CLI args to override config
-        self.auto_paste = auto_paste if auto_paste != False else self.config.get("auto_paste", auto_paste)
+        self.auto_paste = (
+            auto_paste
+            if auto_paste != False
+            else self.config.get("auto_paste", auto_paste)
+        )
         self.speed = speed if speed != 1.0 else self.config.get("speed", speed)
-        self.toggle_mode = toggle_mode if toggle_mode != True else self.config.get("toggle_mode", toggle_mode)
-        self.keep_recordings = keep_recordings if keep_recordings != 3 else self.config.get("keep_recordings", keep_recordings)
-        self.window_seconds = window_seconds if window_seconds != 7.0 else self.config.get("window_seconds", window_seconds)
-        self.slide_seconds = slide_seconds if slide_seconds != 3.0 else self.config.get("slide_seconds", slide_seconds)
-        self.clear_clipboard_after_paste = self.config.get("clear_clipboard_after_paste", False)
-        self.start_delay_seconds = start_delay_seconds if start_delay_seconds != 2.0 else self.config.get("start_delay_seconds", start_delay_seconds)
+        self.toggle_mode = (
+            toggle_mode
+            if toggle_mode != True
+            else self.config.get("toggle_mode", toggle_mode)
+        )
+        self.keep_recordings = (
+            keep_recordings
+            if keep_recordings != 3
+            else self.config.get("keep_recordings", keep_recordings)
+        )
+        self.window_seconds = (
+            window_seconds
+            if window_seconds != 7.0
+            else self.config.get("window_seconds", window_seconds)
+        )
+        self.slide_seconds = (
+            slide_seconds
+            if slide_seconds != 3.0
+            else self.config.get("slide_seconds", slide_seconds)
+        )
+        self.clear_clipboard_after_paste = self.config.get(
+            "clear_clipboard_after_paste", False
+        )
+        self.start_delay_seconds = (
+            start_delay_seconds
+            if start_delay_seconds != 2.0
+            else self.config.get("start_delay_seconds", start_delay_seconds)
+        )
 
         # Parse hotkey from config
-        self.hotkey = self.config.get("hotkey", "alt+q")
+        self.hotkey = self.config.get("hotkey", "super+alt+space")
         self.hotkey_parts = self._parse_hotkey(self.hotkey)
 
         # Get theme, audio device, and overlay settings from config
         self.theme = self.config.get("theme", "auto")
         self.audio_device = self.config.get("audio_device", None)
         self.show_overlay = self.config.get("show_overlay", True)
-        self.overlay_auto_hide_seconds = self.config.get("overlay_auto_hide_seconds", 3.0)
+        self.overlay_auto_hide_seconds = self.config.get(
+            "overlay_auto_hide_seconds", 3.0
+        )
         self.show_notifications = self.config.get("show_notifications", False)
 
         # Model and recorder
         self.model = None
+        self.model_load_error = None
+        self.model_load_error_reported = False
         self.recorder = StreamingRecorder(
             window_seconds=self.window_seconds,
             slide_seconds=self.slide_seconds,
@@ -336,23 +391,50 @@ class QtSTTServer(QObject):
 
     def _parse_hotkey(self, hotkey_str):
         """Parse hotkey string into component parts."""
-        parts = hotkey_str.lower().split("+")
+        parts = (hotkey_str or "").lower().split("+")
+        aliases = {
+            "control": "ctrl",
+            "option": "alt",
+            "command": "meta",
+            "cmd": "meta",
+            "super": "meta",
+            "win": "meta",
+            "windows": "meta",
+            "spacebar": "space",
+        }
+        parts = [aliases.get(part, part) for part in parts]
         return {
             "modifiers": set(p for p in parts if p in ["ctrl", "alt", "shift", "meta"]),
-            "keys": [p for p in parts if p not in ["ctrl", "alt", "shift", "meta"]]
+            "keys": [p for p in parts if p not in ["ctrl", "alt", "shift", "meta"]],
         }
 
     def _check_hotkey_pressed(self):
         """Check if the configured hotkey combination is currently pressed."""
         # Check modifiers
         modifiers_pressed = set()
-        if Key.ctrl_l in self.current_keys or Key.ctrl in self.current_keys or Key.ctrl_r in self.current_keys:
+        if (
+            Key.ctrl_l in self.current_keys
+            or Key.ctrl in self.current_keys
+            or Key.ctrl_r in self.current_keys
+        ):
             modifiers_pressed.add("ctrl")
-        if Key.alt_l in self.current_keys or Key.alt in self.current_keys or Key.alt_r in self.current_keys:
+        if (
+            Key.alt_l in self.current_keys
+            or Key.alt in self.current_keys
+            or Key.alt_r in self.current_keys
+        ):
             modifiers_pressed.add("alt")
-        if Key.shift_l in self.current_keys or Key.shift in self.current_keys or Key.shift_r in self.current_keys:
+        if (
+            Key.shift_l in self.current_keys
+            or Key.shift in self.current_keys
+            or Key.shift_r in self.current_keys
+        ):
             modifiers_pressed.add("shift")
-        if hasattr(Key, 'cmd') and (Key.cmd in self.current_keys or Key.cmd_l in self.current_keys or Key.cmd_r in self.current_keys):
+        if hasattr(Key, "cmd") and (
+            Key.cmd in self.current_keys
+            or Key.cmd_l in self.current_keys
+            or Key.cmd_r in self.current_keys
+        ):
             modifiers_pressed.add("meta")
 
         # Check if required modifiers match
@@ -367,39 +449,44 @@ class QtSTTServer(QObject):
                 if keyboard.KeyCode.from_char(required_key) in self.current_keys:
                     key_found = True
                 # On macOS, some key combinations produce special characters
-                # For example, Option+Q produces 'œ'
-                if required_key == 'q' and keyboard.KeyCode.from_char('œ') in self.current_keys:
+                if (
+                    required_key == "q"
+                    and keyboard.KeyCode.from_char("œ") in self.current_keys
+                ):
                     key_found = True
             except:
                 pass
 
             # Check special keys
             special_keys = {
-                'space': Key.space,
-                'return': Key.enter,
-                'enter': Key.enter,
-                'tab': Key.tab,
-                'backspace': Key.backspace,
-                'delete': Key.delete,
-                'home': Key.home,
-                'end': Key.end,
-                'pageup': Key.page_up,
-                'pagedown': Key.page_down,
-                'up': Key.up,
-                'down': Key.down,
-                'left': Key.left,
-                'right': Key.right,
+                "space": Key.space,
+                "return": Key.enter,
+                "enter": Key.enter,
+                "tab": Key.tab,
+                "backspace": Key.backspace,
+                "delete": Key.delete,
+                "home": Key.home,
+                "end": Key.end,
+                "pageup": Key.page_up,
+                "pagedown": Key.page_down,
+                "up": Key.up,
+                "down": Key.down,
+                "left": Key.left,
+                "right": Key.right,
             }
 
             # Add insert key only if it exists (not available on macOS)
-            if hasattr(Key, 'insert'):
-                special_keys['insert'] = Key.insert
+            if hasattr(Key, "insert"):
+                special_keys["insert"] = Key.insert
 
             # F-keys
             for i in range(1, 13):
-                special_keys[f'f{i}'] = getattr(Key, f'f{i}', None)
+                special_keys[f"f{i}"] = getattr(Key, f"f{i}", None)
 
-            if required_key in special_keys and special_keys[required_key] in self.current_keys:
+            if (
+                required_key in special_keys
+                and special_keys[required_key] in self.current_keys
+            ):
                 key_found = True
 
             if not key_found:
@@ -422,14 +509,14 @@ class QtSTTServer(QObject):
         import logging
 
         # Reduce NeMo logging verbosity
-        nemo_logger = logging.getLogger('nemo_logger')
+        nemo_logger = logging.getLogger("nemo_logger")
         nemo_logger.setLevel(logging.ERROR)
 
         # Tips to display while loading
         tips = [
             f"💡 Press {self.hotkey.upper()} to start recording, press again to stop",
             "💡 Your transcription is automatically copied to clipboard",
-            "💡 Press Esc to exit the application at any time",
+            "💡 Use the system tray menu to quit the application",
             "💡 The overlay window shows real-time transcription progress",
             "💡 Audio is processed in 7-second chunks with 4-second overlap",
             "💡 Overlap merging ensures no words are cut mid-syllable",
@@ -478,27 +565,45 @@ class QtSTTServer(QObject):
         tips_thread = threading.Thread(target=show_tips, daemon=True)
         tips_thread.start()
 
-        os.environ["CUDA_VISIBLE_DEVICES"] = ""
+        error = None
+        try:
+            os.environ["CUDA_VISIBLE_DEVICES"] = ""
+            disable_torch_jit()
+            import nemo.collections.asr as nemo_asr
 
-        self.model = nemo_asr.models.ASRModel.from_pretrained(
-            model_name="nvidia/parakeet-tdt-0.6b-v3"
-        )
-        self.model = self.model.cpu()
-        self.model.eval()
+            self.model = nemo_asr.models.ASRModel.from_pretrained(
+                model_name="nvidia/parakeet-tdt-0.6b-v3"
+            )
+            self.model = self.model.cpu()
+            self.model.eval()
+            self.model_load_error = None
+        except Exception as exc:
+            error = exc
+            self.model = None
+            self.model_load_error = exc
+        finally:
+            tips_active.clear()
+            time.sleep(0.2)  # Let tips thread finish
 
-        tips_active.clear()
-        time.sleep(0.2)  # Let tips thread finish
-        self._print("✓ Model loaded successfully\n")
+        if error is None:
+            self._print("✓ Model loaded successfully\n")
+        else:
+            self._print("❌ Failed to load the ASR model.")
+            self._print(f"   Error: {error}")
+            self._print(
+                "   If you're running a bundled binary, TorchScript may be blocked by"
+                " missing source files."
+            )
 
     def create_tray_icon(self):
         """Create system tray icon."""
         # Create simple icon
         pixmap = QPixmap(64, 64)
-        pixmap.fill(QColor('#1e1e1e'))
+        pixmap.fill(QColor("#1e1e1e"))
 
         painter = QPainter(pixmap)
         painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor('#00ff00'))
+        painter.setBrush(QColor("#00ff00"))
         # Microphone shape
         painter.drawEllipse(16, 10, 32, 30)  # Head
         painter.drawRect(28, 35, 8, 15)  # Stem
@@ -558,7 +663,9 @@ class QtSTTServer(QObject):
 
         # Apply overlay auto-hide changes
         if "overlay_auto_hide_seconds" in changed_settings:
-            self.overlay_auto_hide_seconds = changed_settings["overlay_auto_hide_seconds"]
+            self.overlay_auto_hide_seconds = changed_settings[
+                "overlay_auto_hide_seconds"
+            ]
             if self.overlay:
                 self.overlay.set_auto_hide_seconds(self.overlay_auto_hide_seconds)
             print(f"✓ Overlay auto-hide: {self.overlay_auto_hide_seconds}s")
@@ -573,7 +680,11 @@ class QtSTTServer(QObject):
             self.audio_device = changed_settings["audio_device"]
             # Update recorder with new device
             self.recorder.device = self.audio_device
-            device_name = "Default" if self.audio_device is None else f"Device #{self.audio_device}"
+            device_name = (
+                "Default"
+                if self.audio_device is None
+                else f"Device #{self.audio_device}"
+            )
             print(f"✓ Audio device updated to: {device_name}")
 
         # Apply hotkey changes
@@ -624,7 +735,9 @@ class QtSTTServer(QObject):
                 print(f"✓ Recordings: Keep last {self.keep_recordings}")
 
         if "clear_clipboard_after_paste" in changed_settings:
-            self.clear_clipboard_after_paste = changed_settings["clear_clipboard_after_paste"]
+            self.clear_clipboard_after_paste = changed_settings[
+                "clear_clipboard_after_paste"
+            ]
             print(f"✓ Clear clipboard after paste: {self.clear_clipboard_after_paste}")
 
         print("✓ All settings applied successfully!")
@@ -640,7 +753,11 @@ class QtSTTServer(QObject):
         try:
             # Wait for model to load
             if self.model is None:
-                self._print("⏳ Waiting for model to load...")
+                if self.model_load_error and not self.model_load_error_reported:
+                    self.model_load_error_reported = True
+                    self._print("❌ Model failed to load; transcription is unavailable.")
+                else:
+                    self._print("⏳ Waiting for model to load...")
                 return None
 
             chunk_file = self.recorder.save_chunk_to_file(chunk_np, chunk_id)
@@ -677,8 +794,12 @@ class QtSTTServer(QObject):
 
             if chunk_np is not None:
                 self.chunk_counter += 1
-                is_last = not self.is_transcribing and self.recorder.processing_queue.empty()
-                self.transcribe_chunk(chunk_np, self.chunk_counter, is_last_chunk=is_last)
+                is_last = (
+                    not self.is_transcribing and self.recorder.processing_queue.empty()
+                )
+                self.transcribe_chunk(
+                    chunk_np, self.chunk_counter, is_last_chunk=is_last
+                )
             else:
                 time.sleep(0.1)
 
@@ -687,12 +808,18 @@ class QtSTTServer(QObject):
         if self.is_recording:
             return
 
+        self.recorder.start_recording()
+        if not self.recorder.is_recording:
+            self._print("❌ Recording failed to start.")
+            self.signals.set_recording.emit(False)
+            return
+
         self.is_recording = True
         self.signals.set_recording.emit(True)
-
-        self.recorder.start_recording()
         self.is_transcribing = True
-        self.transcription_thread = threading.Thread(target=self.streaming_transcription_loop, daemon=True)
+        self.transcription_thread = threading.Thread(
+            target=self.streaming_transcription_loop, daemon=True
+        )
         self.transcription_thread.start()
 
     def stop_recording(self):
@@ -704,6 +831,12 @@ class QtSTTServer(QObject):
         self.signals.set_recording.emit(False)
 
         audio_file = self.recorder.stop_recording()
+        if not audio_file:
+            self._print("⚠️  No audio captured; skipping transcription.")
+            self.is_transcribing = False
+            if self.transcription_thread:
+                self.transcription_thread.join(timeout=2.0)
+            return
 
         # Check duration
         try:
@@ -741,19 +874,9 @@ class QtSTTServer(QObject):
                 if text:
                     self._print(f"[Short recording] {text}")
                     pyperclip.copy(text)
-                    self.signals.update_text.emit(f"✓ Copied: {text}", len(text.split()))
-
-                    if NOTIFICATIONS_AVAILABLE and self.show_notifications:
-                        try:
-                            preview = text[:50] + "..." if len(text) > 50 else text
-                            notification.notify(
-                                title="Copied to clipboard!",
-                                message=preview,
-                                app_name='STT Server',
-                                timeout=2
-                            )
-                        except:
-                            pass  # Silently fail if notifications don't work
+                    self.signals.update_text.emit(
+                        f"✓ Copied: {text}", len(text.split())
+                    )
 
                     if self.auto_paste:
                         time.sleep(0.2)
@@ -773,7 +896,9 @@ class QtSTTServer(QObject):
 
         else:
             # Long recording - finalize streaming
-            self._print(f"⏹️  Stopping recording ({duration:.1f}s), finalizing transcription...")
+            self._print(
+                f"⏹️  Stopping recording ({duration:.1f}s), finalizing transcription..."
+            )
 
             self.is_transcribing = False
             if self.transcription_thread:
@@ -784,7 +909,9 @@ class QtSTTServer(QObject):
             # Fallback: if streaming didn't produce results (2-3s recordings),
             # transcribe the whole file instead
             if not final_text:
-                self._print("⚠️  No chunks processed, transcribing whole file as fallback...")
+                self._print(
+                    "⚠️  No chunks processed, transcribing whole file as fallback..."
+                )
                 try:
                     # Wait for model to load (should already be loaded)
                     wait_count = 0
@@ -810,19 +937,10 @@ class QtSTTServer(QObject):
             if final_text:
                 self._print(f"\n📋 Final transcription:\n{final_text}\n")
                 pyperclip.copy(final_text)
-                self.signals.update_text.emit(f"✓ Copied: {final_text}", len(final_text.split()))
+                self.signals.update_text.emit(
+                    f"✓ Copied: {final_text}", len(final_text.split())
+                )
 
-                if NOTIFICATIONS_AVAILABLE and self.show_notifications:
-                    try:
-                        preview = final_text[:50] + "..." if len(final_text) > 50 else final_text
-                        notification.notify(
-                            title="Copied to clipboard!",
-                            message=preview,
-                            app_name='STT Server',
-                            timeout=2
-                        )
-                    except:
-                        pass  # Silently fail if notifications don't work
             else:
                 self._print("⚠️  No speech detected in recording")
 
@@ -830,6 +948,7 @@ class QtSTTServer(QObject):
         if self.keep_recordings == -1 and audio_file:
             try:
                 from pathlib import Path
+
                 Path(audio_file).unlink()
                 # Optionally print deletion (commented to reduce noise)
                 # print(f"🗑️  Deleted recording: {Path(audio_file).name}")
@@ -866,10 +985,6 @@ class QtSTTServer(QObject):
         if self.is_shutting_down:
             return False
 
-        if key == Key.esc:
-            self.quit_app()
-            return False
-
         try:
             if key in self.current_keys:
                 self.current_keys.remove(key)
@@ -888,7 +1003,7 @@ class QtSTTServer(QObject):
         self.overlay = TranscriptionOverlay(
             hotkey=self.hotkey,
             theme=self.theme,
-            auto_hide_seconds=self.overlay_auto_hide_seconds
+            auto_hide_seconds=self.overlay_auto_hide_seconds,
         )
         if self.show_overlay:
             self.overlay.show()
@@ -906,7 +1021,9 @@ class QtSTTServer(QObject):
         # macOS requires accessibility permission for global hotkeys
         accessibility_ready = ensure_accessibility_permissions(prompt=True)
         if not accessibility_ready:
-            self._print("⚠️  Grant macOS accessibility permissions so Alt+Q can be captured.")
+            self._print(
+                "⚠️  Grant macOS accessibility permissions so the hotkey can be captured."
+            )
             opened_accessibility = open_system_settings_privacy("Privacy_Accessibility")
             if opened_accessibility:
                 self._print(
@@ -927,14 +1044,15 @@ class QtSTTServer(QObject):
                     "   2. Enable Maivi (Python) under Input Monitoring to remove the warning."
                 )
 
-            self._print("   Restart Maivi after granting access if the hotkey does not respond.")
+            self._print(
+                "   Restart Maivi after granting access if the hotkey does not respond."
+            )
 
         # Start keyboard listener in background
         keyboard_listener = None
         try:
             keyboard_listener = keyboard.Listener(
-                on_press=self.on_press,
-                on_release=self.on_release
+                on_press=self.on_press, on_release=self.on_release
             )
             keyboard_listener.start()
         except Exception as error:
@@ -946,10 +1064,11 @@ class QtSTTServer(QObject):
 
         self._print("✓ STT Server running")
         self._print(f"  Press {self.hotkey.upper()} to start/stop recording")
-        self._print("  Press Esc to exit")
+        self._print("  Use the system tray menu to exit")
 
         # Show recording retention policy and directory location
         from platformdirs import user_data_dir
+
         recordings_dir = Path(user_data_dir("maivi", "MaximeRivest")) / "recordings"
 
         if self.keep_recordings == 0:
@@ -957,7 +1076,9 @@ class QtSTTServer(QObject):
         elif self.keep_recordings == -1:
             self._print("  🗑️  Deleting recordings immediately after transcription")
         else:
-            self._print(f"  📁 Keeping last {self.keep_recordings} recording(s) in {recordings_dir}")
+            self._print(
+                f"  📁 Keeping last {self.keep_recordings} recording(s) in {recordings_dir}"
+            )
         self._print()
 
         try:

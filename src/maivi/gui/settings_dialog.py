@@ -1,10 +1,20 @@
 """
 Settings dialog for Maivi configuration.
 """
+
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QLabel, QLineEdit,
-    QDoubleSpinBox, QSpinBox, QCheckBox,
-    QGroupBox, QFormLayout, QDialogButtonBox, QMessageBox, QComboBox
+    QDialog,
+    QVBoxLayout,
+    QLabel,
+    QLineEdit,
+    QDoubleSpinBox,
+    QSpinBox,
+    QCheckBox,
+    QGroupBox,
+    QFormLayout,
+    QDialogButtonBox,
+    QMessageBox,
+    QComboBox,
 )
 from PySide6.QtCore import Qt, Signal
 from maivi import __version__
@@ -166,7 +176,9 @@ class SettingsDialog(QDialog):
         self.hotkey_edit = HotkeyEdit()
         hotkey_layout.addRow("Recording Hotkey:", self.hotkey_edit)
 
-        hotkey_help = QLabel("Click the field and press your desired key combination.\nPress Esc to clear.")
+        hotkey_help = QLabel(
+            "Click the field and press your desired key combination.\nPress Esc to clear."
+        )
         hotkey_help.setStyleSheet("color: gray; font-size: 9pt;")
         hotkey_layout.addRow("", hotkey_help)
 
@@ -187,14 +199,18 @@ class SettingsDialog(QDialog):
         self.window_spin.setRange(1.0, 30.0)
         self.window_spin.setSingleStep(0.5)
         self.window_spin.setSuffix(" seconds")
-        self.window_spin.setToolTip("Audio chunk window size (larger = better quality but slower)")
+        self.window_spin.setToolTip(
+            "Audio chunk window size (larger = better quality but slower)"
+        )
         audio_layout.addRow("Window Size:", self.window_spin)
 
         self.slide_spin = QDoubleSpinBox()
         self.slide_spin.setRange(0.5, 20.0)
         self.slide_spin.setSingleStep(0.5)
         self.slide_spin.setSuffix(" seconds")
-        self.slide_spin.setToolTip("Slide interval (smaller = more overlap, higher CPU usage)")
+        self.slide_spin.setToolTip(
+            "Slide interval (smaller = more overlap, higher CPU usage)"
+        )
         audio_layout.addRow("Slide Interval:", self.slide_spin)
 
         self.delay_spin = QDoubleSpinBox()
@@ -219,11 +235,15 @@ class SettingsDialog(QDialog):
         behavior_layout = QFormLayout()
 
         self.toggle_mode_check = QCheckBox()
-        self.toggle_mode_check.setToolTip("Toggle mode: press once to start, once to stop\nUnchecked: hold mode (hold hotkey to record)")
+        self.toggle_mode_check.setToolTip(
+            "Toggle mode: press once to start, once to stop\nUnchecked: hold mode (hold hotkey to record)"
+        )
         behavior_layout.addRow("Toggle Mode:", self.toggle_mode_check)
 
         self.auto_paste_check = QCheckBox()
-        self.auto_paste_check.setToolTip("Automatically paste transcribed text (default: copy to clipboard only)")
+        self.auto_paste_check.setToolTip(
+            "Automatically paste transcribed text (default: copy to clipboard only)"
+        )
         behavior_layout.addRow("Auto-paste:", self.auto_paste_check)
 
         behavior_group.setLayout(behavior_layout)
@@ -239,7 +259,9 @@ class SettingsDialog(QDialog):
         appearance_layout.addRow("Theme:", self.theme_combo)
 
         self.show_overlay_check = QCheckBox()
-        self.show_overlay_check.setToolTip("Show the overlay window with live transcription")
+        self.show_overlay_check.setToolTip(
+            "Show the overlay window with live transcription"
+        )
         appearance_layout.addRow("Show Overlay:", self.show_overlay_check)
 
         self.overlay_auto_hide_spin = QDoubleSpinBox()
@@ -247,11 +269,15 @@ class SettingsDialog(QDialog):
         self.overlay_auto_hide_spin.setSingleStep(0.5)
         self.overlay_auto_hide_spin.setSuffix(" seconds")
         self.overlay_auto_hide_spin.setSpecialValueText("Never hide")
-        self.overlay_auto_hide_spin.setToolTip("Auto-hide overlay after N seconds when not recording (0 = never hide)")
+        self.overlay_auto_hide_spin.setToolTip(
+            "Auto-hide overlay after N seconds when not recording (0 = never hide)"
+        )
         appearance_layout.addRow("Overlay Auto-hide:", self.overlay_auto_hide_spin)
 
         self.show_notifications_check = QCheckBox()
-        self.show_notifications_check.setToolTip("Show system notifications when transcription is complete")
+        self.show_notifications_check.setToolTip(
+            "Show system notifications when transcription is complete"
+        )
         appearance_layout.addRow("Show Notifications:", self.show_notifications_check)
 
         appearance_group.setLayout(appearance_layout)
@@ -264,7 +290,9 @@ class SettingsDialog(QDialog):
         self.keep_recordings_spin = QSpinBox()
         self.keep_recordings_spin.setRange(-1, 1000)
         self.keep_recordings_spin.setSpecialValueText("Delete immediately")
-        self.keep_recordings_spin.setToolTip("Number of recordings to keep\n-1: delete immediately\n0: keep all\n>0: keep last N")
+        self.keep_recordings_spin.setToolTip(
+            "Number of recordings to keep\n-1: delete immediately\n0: keep all\n>0: keep last N"
+        )
         recording_layout.addRow("Keep Recordings:", self.keep_recordings_spin)
 
         recording_group.setLayout(recording_layout)
@@ -272,11 +300,15 @@ class SettingsDialog(QDialog):
 
         # Buttons
         button_box = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel | QDialogButtonBox.RestoreDefaults
+            QDialogButtonBox.Ok
+            | QDialogButtonBox.Cancel
+            | QDialogButtonBox.RestoreDefaults
         )
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
-        button_box.button(QDialogButtonBox.RestoreDefaults).clicked.connect(self.restore_defaults)
+        button_box.button(QDialogButtonBox.RestoreDefaults).clicked.connect(
+            self.restore_defaults
+        )
 
         layout.addWidget(button_box)
 
@@ -290,8 +322,8 @@ class SettingsDialog(QDialog):
 
             for idx, device in enumerate(devices):
                 # Only show input devices (those with input channels)
-                if device['max_input_channels'] > 0:
-                    device_name = device['name']
+                if device["max_input_channels"] > 0:
+                    device_name = device["name"]
                     # Show both index and name for clarity
                     self.audio_device_combo.addItem(f"{device_name} (#{idx})", idx)
         except Exception as e:
@@ -300,7 +332,7 @@ class SettingsDialog(QDialog):
 
     def load_settings(self):
         """Load settings from config into UI."""
-        self.hotkey_edit.set_hotkey(self.config.get("hotkey", "alt+q"))
+        self.hotkey_edit.set_hotkey(self.config.get("hotkey", "super+alt+space"))
         self.window_spin.setValue(self.config.get("window_seconds", 7.0))
         self.slide_spin.setValue(self.config.get("slide_seconds", 3.0))
         self.delay_spin.setValue(self.config.get("start_delay_seconds", 2.0))
@@ -327,8 +359,12 @@ class SettingsDialog(QDialog):
 
         # Load overlay settings
         self.show_overlay_check.setChecked(self.config.get("show_overlay", True))
-        self.overlay_auto_hide_spin.setValue(self.config.get("overlay_auto_hide_seconds", 3.0))
-        self.show_notifications_check.setChecked(self.config.get("show_notifications", False))
+        self.overlay_auto_hide_spin.setValue(
+            self.config.get("overlay_auto_hide_seconds", 3.0)
+        )
+        self.show_notifications_check.setChecked(
+            self.config.get("show_notifications", False)
+        )
 
     def save_settings(self):
         """Save settings from UI to config and emit changes."""
@@ -355,7 +391,9 @@ class SettingsDialog(QDialog):
 
         # Save overlay settings
         self.config.set("show_overlay", self.show_overlay_check.isChecked())
-        self.config.set("overlay_auto_hide_seconds", self.overlay_auto_hide_spin.value())
+        self.config.set(
+            "overlay_auto_hide_seconds", self.overlay_auto_hide_spin.value()
+        )
         self.config.set("show_notifications", self.show_notifications_check.isChecked())
 
         self.config.save()
@@ -376,7 +414,7 @@ class SettingsDialog(QDialog):
             "Restore Defaults",
             "Are you sure you want to restore all settings to their default values?",
             QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            QMessageBox.No,
         )
 
         if reply == QMessageBox.Yes:
@@ -392,7 +430,7 @@ class SettingsDialog(QDialog):
             self,
             "Settings Saved",
             "Settings have been saved and applied!",
-            QMessageBox.Ok
+            QMessageBox.Ok,
         )
 
         super().accept()

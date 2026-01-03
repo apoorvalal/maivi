@@ -122,7 +122,7 @@ maia --help
 ## 🎯 Quick Reference
 
 **Entry Points:**
-- `maia` - Qt GUI with Alt+Q hotkey (Option+Q on macOS)
+- `maia` - Qt GUI with a configurable hotkey (default: Super+Alt+Space)
 - `maia-cli` - CLI with options
 
 **Repository Structure:**

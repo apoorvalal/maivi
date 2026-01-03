@@ -2,7 +2,7 @@
 
 **Real-time voice-to-text transcription with hotkey support**
 
-Maivi (My AI Voice Input) is a cross-platform desktop application that turns your voice into text using state-of-the-art AI models. Simply press **Alt+Q** (Option+Q on macOS) to start recording, and press again to stop. Your transcription appears in real-time and is automatically copied to your clipboard.
+Maivi (My AI Voice Input) is a cross-platform desktop application that turns your voice into text using state-of-the-art AI models. Simply press your configured hotkey (default: **Super+Alt+Space**) to start recording, and press again to stop. Your transcription appears in real-time and is automatically copied to your clipboard.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)
@@ -13,7 +13,7 @@ Maivi (My AI Voice Input) is a cross-platform desktop application that turns you
 
 ## ✨ Features
 
-- 🎤 **Hotkey Recording** - Toggle recording with Alt+Q (Option+Q on macOS)
+- 🎤 **Hotkey Recording** - Toggle recording with your hotkey (default: Super+Alt+Space)
 - ⚡ **Real-time Transcription** - See text appear as you speak
 - 📋 **Clipboard Integration** - Automatic copy to clipboard
 - 🪟 **Floating Overlay** - Live transcription in a sleek overlay window
@@ -102,7 +102,7 @@ Grant Maivi microphone, Accessibility, and Input Monitoring permissions the firs
 maivi
 ```
 
-Press **Alt+Q** (Option+Q on macOS) to start recording, press **Alt+Q** again to stop. The transcription will appear in a floating overlay and be copied to your clipboard.
+Press your hotkey (default: **Super+Alt+Space**) to start recording, press it again to stop. The transcription will appear in a floating overlay and be copied to your clipboard.
 
 **CLI Mode:**
 ```bash
@@ -117,8 +117,8 @@ maia-cli --window 10 --slide 5 --show-ui
 ```
 
 **Controls:**
-- **Alt+Q** (Option+Q on macOS) - Start/stop recording (toggle mode)
-- **Esc** - Exit application
+- **Configured hotkey** (default: Super+Alt+Space) - Start/stop recording (toggle mode)
+- **Quit** - Use the system tray menu
 
 ## 📖 How It Works
 

@@ -2,6 +2,7 @@
 Configuration management for Maivi.
 Handles settings persistence and loading.
 """
+
 import json
 from pathlib import Path
 from typing import Dict, Any
@@ -12,7 +13,7 @@ class Config:
     """Manages application configuration."""
 
     DEFAULT_SETTINGS = {
-        "hotkey": "alt+q",
+        "hotkey": "super+alt+space",
         "window_seconds": 7.0,
         "slide_seconds": 3.0,
         "start_delay_seconds": 2.0,
@@ -41,7 +42,7 @@ class Config:
             return
 
         try:
-            with open(self.config_file, 'r') as f:
+            with open(self.config_file, "r") as f:
                 loaded = json.load(f)
                 # Merge with defaults to handle new settings
                 self.settings.update(loaded)
@@ -52,7 +53,7 @@ class Config:
         """Save settings to config file."""
         try:
             self.config_dir.mkdir(parents=True, exist_ok=True)
-            with open(self.config_file, 'w') as f:
+            with open(self.config_file, "w") as f:
                 json.dump(self.settings, f, indent=2)
         except Exception as e:
             print(f"Warning: Could not save config: {e}")

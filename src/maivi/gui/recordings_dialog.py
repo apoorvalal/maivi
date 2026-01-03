@@ -1,13 +1,22 @@
 """
 Recordings dialog for viewing and managing past recordings.
 """
+
 import os
 import subprocess
 from pathlib import Path
 from datetime import datetime
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QTextEdit, QSplitter, QMessageBox
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QListWidget,
+    QListWidgetItem,
+    QTextEdit,
+    QSplitter,
+    QMessageBox,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
@@ -21,7 +30,9 @@ class RecordingsDialog(QDialog):
     def __init__(self, model=None, parent=None):
         super().__init__(parent)
         self.model = model  # STT model for transcribing
-        self.recordings_dir = Path(user_data_dir("maivi", "MaximeRivest")) / "recordings"
+        self.recordings_dir = (
+            Path(user_data_dir("maivi", "MaximeRivest")) / "recordings"
+        )
         self.current_recording = None
         self.transcription_cache = {}  # Cache transcriptions
 
@@ -36,7 +47,7 @@ class RecordingsDialog(QDialog):
 
         # Title
         title = QLabel("<b>Recordings History</b>")
-        title.setFont(QFont('Arial', 14))
+        title.setFont(QFont("Arial", 14))
         layout.addWidget(title)
 
         # Splitter for recordings list and details
@@ -122,7 +133,7 @@ class RecordingsDialog(QDialog):
         recording_files = sorted(
             self.recordings_dir.glob("recording_*.wav"),
             key=lambda p: p.stat().st_mtime,
-            reverse=True  # Newest first
+            reverse=True,  # Newest first
         )
 
         if not recording_files:
@@ -137,7 +148,9 @@ class RecordingsDialog(QDialog):
             filename = recording_path.name
             try:
                 # Extract timestamp from filename: recording_YYYYMMDD_HHMMSS[_speed].wav
-                parts = filename.replace("recording_", "").replace(".wav", "").split("_")
+                parts = (
+                    filename.replace("recording_", "").replace(".wav", "").split("_")
+                )
                 date_str = parts[0]  # YYYYMMDD
                 time_str = parts[1]  # HHMMSS
 
@@ -155,7 +168,9 @@ class RecordingsDialog(QDialog):
                 # Get file size
                 size_mb = recording_path.stat().st_size / (1024 * 1024)
 
-                display_text = f"{display_date} - {display_time}{speed_info} ({size_mb:.1f} MB)"
+                display_text = (
+                    f"{display_date} - {display_time}{speed_info} ({size_mb:.1f} MB)"
+                )
             except Exception:
                 # Fallback to filename if parsing fails
                 display_text = filename
@@ -190,7 +205,9 @@ class RecordingsDialog(QDialog):
             self.transcription_text.setText(transcription)
             self.copy_button.setEnabled(True)
         else:
-            self.transcription_text.setText("Click 'Transcribe Now' to generate transcription...")
+            self.transcription_text.setText(
+                "Click 'Transcribe Now' to generate transcription..."
+            )
             self.copy_button.setEnabled(False)
 
     def play_audio(self):
@@ -200,10 +217,10 @@ class RecordingsDialog(QDialog):
 
         try:
             # Use system default audio player
-            if os.name == 'nt':  # Windows
+            if os.name == "nt":  # Windows
                 os.startfile(str(self.current_recording))
-            elif os.name == 'posix':  # macOS/Linux
-                subprocess.run(['open', str(self.current_recording)], check=False)
+            elif os.name == "posix":  # macOS/Linux
+                subprocess.run(["open", str(self.current_recording)], check=False)
         except Exception as e:
             QMessageBox.warning(self, "Playback Error", f"Could not play audio:\n{e}")
 
@@ -212,7 +229,9 @@ class RecordingsDialog(QDialog):
         text = self.transcription_text.toPlainText()
         if text and text != "Click 'Transcribe Now' to generate transcription...":
             pyperclip.copy(text)
-            QMessageBox.information(self, "Copied", "Transcription copied to clipboard!")
+            QMessageBox.information(
+                self, "Copied", "Transcription copied to clipboard!"
+            )
 
     def transcribe_recording(self):
         """Transcribe the selected recording."""
@@ -232,7 +251,9 @@ class RecordingsDialog(QDialog):
 
         try:
             # Transcribe
-            output = self.model.transcribe([str(self.current_recording)], timestamps=False)
+            output = self.model.transcribe(
+                [str(self.current_recording)], timestamps=False
+            )
             transcription = output[0].text.strip()
 
             if transcription:

@@ -3,15 +3,18 @@
 Entry point for Maivi - My AI Voice Input.
 Launches the Qt GUI by default.
 """
+
 import argparse
 import sys
+
+from maivi.utils.torch_jit import disable_torch_jit
 
 
 def main():
     """Main entry point for Maivi GUI."""
     parser = argparse.ArgumentParser(
         description="🎤 Maivi - My AI Voice Input\n"
-                    "Real-time voice-to-text transcription with hotkey support",
+        "Real-time voice-to-text transcription with hotkey support",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -25,8 +28,8 @@ Examples:
   maivi --reprocess ~/.local/share/maivi/recordings/recording_20251005_123456.wav
 
 Controls:
-  Alt+Q (default hotkey)       Start/stop recording (toggle mode)
-  Esc                          Exit application
+  Configured hotkey           Start/stop recording (toggle mode)
+  System tray menu            Exit application
 
 Settings:
   Right-click the system tray icon to access Settings where you can:
@@ -47,7 +50,7 @@ Recording storage:
   Default: keeps last 3 recordings (use --keep-recordings to change).
 
 For more info: https://github.com/MaximeRivest/maivi
-        """
+        """,
     )
 
     # Audio parameters
@@ -57,7 +60,7 @@ For more info: https://github.com/MaximeRivest/maivi
         default=7.0,
         metavar="SECONDS",
         help="Audio chunk window size in seconds (default: 7.0). "
-             "Larger = better quality but slower processing."
+        "Larger = better quality but slower processing.",
     )
     parser.add_argument(
         "--slide",
@@ -65,8 +68,8 @@ For more info: https://github.com/MaximeRivest/maivi
         default=3.0,
         metavar="SECONDS",
         help="Slide interval in seconds (default: 3.0). "
-             "Smaller = more overlap, higher CPU usage. "
-             "Must be > window × 0.36 to avoid queue buildup."
+        "Smaller = more overlap, higher CPU usage. "
+        "Must be > window × 0.36 to avoid queue buildup.",
     )
     parser.add_argument(
         "--delay",
@@ -74,26 +77,26 @@ For more info: https://github.com/MaximeRivest/maivi
         default=2.0,
         metavar="SECONDS",
         help="Processing start delay in seconds (default: 2.0). "
-             "Time to wait before starting transcription."
+        "Time to wait before starting transcription.",
     )
     parser.add_argument(
         "--speed",
         type=float,
         default=1.0,
         metavar="FACTOR",
-        help="Speed adjustment factor (default: 1.0, experimental)."
+        help="Speed adjustment factor (default: 1.0, experimental).",
     )
 
     # Behavior options
     parser.add_argument(
         "--auto-paste",
         action="store_true",
-        help="Automatically paste transcribed text (default: copy to clipboard only)."
+        help="Automatically paste transcribed text (default: copy to clipboard only).",
     )
     parser.add_argument(
         "--no-toggle",
         action="store_true",
-        help="Use hold mode instead of toggle (hold Alt+Q / Option+Q on macOS to record)."
+        help="Use hold mode instead of toggle (hold the hotkey to record).",
     )
 
     # Recording management
@@ -103,22 +106,19 @@ For more info: https://github.com/MaximeRivest/maivi
         default=3,
         metavar="N",
         help="Keep last N recordings (default: 3). "
-             "Use 0 to keep all, -1 to delete immediately after transcription."
+        "Use 0 to keep all, -1 to delete immediately after transcription.",
     )
     parser.add_argument(
         "--reprocess",
         type=str,
         metavar="FILE",
-        help="Reprocess an existing WAV file and exit."
+        help="Reprocess an existing WAV file and exit.",
     )
 
     # Version
     from maivi import __version__
-    parser.add_argument(
-        "--version",
-        action="version",
-        version=f"Maivi v{__version__}"
-    )
+
+    parser.add_argument("--version", action="version", version=f"Maivi v{__version__}")
 
     args = parser.parse_args()
 
@@ -130,7 +130,6 @@ For more info: https://github.com/MaximeRivest/maivi
     # Handle --reprocess mode
     if args.reprocess:
         from pathlib import Path
-        import nemo.collections.asr as nemo_asr
         import os
 
         wav_file = Path(args.reprocess)
@@ -143,6 +142,9 @@ For more info: https://github.com/MaximeRivest/maivi
         print("📥 Loading AI model...")
 
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
+        disable_torch_jit()
+        import nemo.collections.asr as nemo_asr
+
         model = nemo_asr.models.ASRModel.from_pretrained(
             model_name="nvidia/parakeet-tdt-0.6b-v3"
         )
@@ -160,6 +162,7 @@ For more info: https://github.com/MaximeRivest/maivi
 
             # Copy to clipboard
             import pyperclip
+
             pyperclip.copy(text)
             print("✓ Copied to clipboard!\n")
         else:
@@ -170,11 +173,13 @@ For more info: https://github.com/MaximeRivest/maivi
     # Normal GUI mode
     # Show startup message immediately (before slow imports)
     from maivi import __version__
+
     print(f"\n🎤 Maivi - My AI Voice Input v{__version__}")
     print("   Starting up... (this may take ~30 seconds)\n")
 
     # Check for FFmpeg (optional but recommended for advanced audio processing)
     from maivi.utils.ffmpeg_installer import ensure_ffmpeg_installed
+
     ensure_ffmpeg_installed(silent=False)
     print()
 

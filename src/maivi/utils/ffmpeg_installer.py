@@ -2,6 +2,7 @@
 FFmpeg installation utility for Maivi.
 Automatically downloads and installs FFmpeg if not available.
 """
+
 import os
 import sys
 import shutil
@@ -44,7 +45,9 @@ def install_ffmpeg_linux():
 
     # Use johnvansickle's static builds (widely trusted in the community)
     arch = "amd64" if sys.maxsize > 2**32 else "i686"
-    url = f"https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-{arch}-static.tar.xz"
+    url = (
+        f"https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-{arch}-static.tar.xz"
+    )
 
     try:
         # Download
@@ -54,10 +57,10 @@ def install_ffmpeg_linux():
 
         # Extract
         print("  Extracting...")
-        with tarfile.open(tar_path, 'r:xz') as tar:
+        with tarfile.open(tar_path, "r:xz") as tar:
             # Find ffmpeg and ffprobe binaries
             for member in tar.getmembers():
-                if member.name.endswith('/ffmpeg') or member.name.endswith('/ffprobe'):
+                if member.name.endswith("/ffmpeg") or member.name.endswith("/ffprobe"):
                     member.name = os.path.basename(member.name)
                     tar.extract(member, bin_dir)
 
@@ -98,7 +101,7 @@ def install_ffmpeg_macos():
                 ["brew", "install", "ffmpeg"],
                 capture_output=True,
                 text=True,
-                timeout=300
+                timeout=300,
             )
             if result.returncode == 0:
                 print("✓ FFmpeg installed via Homebrew!")
@@ -125,7 +128,7 @@ def install_ffmpeg_macos():
             urllib.request.urlretrieve(url, zip_path)
 
             print(f"  Extracting {tool}...")
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
                 zip_ref.extractall(bin_dir)
 
             # Make executable
@@ -171,14 +174,16 @@ def install_ffmpeg_windows():
 
         # Extract
         print("  Extracting...")
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
             # Find bin directory in the archive
             for member in zip_ref.namelist():
-                if '/bin/' in member and (member.endswith('ffmpeg.exe') or member.endswith('ffprobe.exe')):
+                if "/bin/" in member and (
+                    member.endswith("ffmpeg.exe") or member.endswith("ffprobe.exe")
+                ):
                     # Extract to our bin directory
                     filename = os.path.basename(member)
                     source = zip_ref.open(member)
-                    target = open(bin_dir / filename, 'wb')
+                    target = open(bin_dir / filename, "wb")
                     with source, target:
                         shutil.copyfileobj(source, target)
 
@@ -218,7 +223,9 @@ def ensure_ffmpeg_installed(silent=False):
 
     # Check if we have it in our local directory
     ffmpeg_dir = get_ffmpeg_dir()
-    if (ffmpeg_dir / "bin" / "ffmpeg").exists() or (ffmpeg_dir / "bin" / "ffmpeg.exe").exists():
+    if (ffmpeg_dir / "bin" / "ffmpeg").exists() or (
+        ffmpeg_dir / "bin" / "ffmpeg.exe"
+    ).exists():
         add_to_path(ffmpeg_dir)
         if is_ffmpeg_installed():
             if not silent:
@@ -234,7 +241,7 @@ def ensure_ffmpeg_installed(silent=False):
 
         try:
             response = input().strip().lower()
-            if response != 'y':
+            if response != "y":
                 print("Skipping FFmpeg installation.")
                 print("Note: Some audio features may not work without FFmpeg.")
                 return False
@@ -266,14 +273,11 @@ def get_ffmpeg_version():
     """Get FFmpeg version string."""
     try:
         result = subprocess.run(
-            ["ffmpeg", "-version"],
-            capture_output=True,
-            text=True,
-            timeout=5
+            ["ffmpeg", "-version"], capture_output=True, text=True, timeout=5
         )
         if result.returncode == 0:
             # First line usually contains version
-            first_line = result.stdout.split('\n')[0]
+            first_line = result.stdout.split("\n")[0]
             return first_line
         return None
     except Exception:

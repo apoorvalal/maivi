@@ -2,11 +2,11 @@
 Streaming STT Server with real-time transcription.
 Processes audio chunks as they're recorded using a sliding window.
 """
+
 import os
 import time
 import threading
 
-import nemo.collections.asr as nemo_asr
 import pyperclip
 import soundfile as sf
 from pynput import keyboard
@@ -16,10 +16,12 @@ from maivi.core.streaming_recorder import StreamingRecorder
 from maivi.core.chunk_merger import SimpleChunkMerger  # New simple merger
 from maivi.cli.terminal_ui import create_streaming_ui
 from maivi.core.pause_detector import PauseDetector
+from maivi.utils.torch_jit import disable_torch_jit
 
 # Cross-platform notifications
 try:
     from plyer import notification
+
     NOTIFICATIONS_AVAILABLE = True
 except ImportError:
     NOTIFICATIONS_AVAILABLE = False
@@ -30,10 +32,11 @@ class StreamingSTTServer:
         self,
         auto_paste=False,
         window_seconds=7.0,  # Chunk size (more context = better quality)
-        slide_seconds=3.0,   # Slide interval (larger overlap = better merging)
+        slide_seconds=3.0,  # Slide interval (larger overlap = better merging)
         start_delay_seconds=2.0,  # Start processing after this delay
         speed=1.0,
-        toggle_mode=False,
+        toggle_mode=True,
+        hotkey="super+alt+space",
         output_file=None,
         show_ui=False,
         ui_width=30,
@@ -43,6 +46,8 @@ class StreamingSTTServer:
         self.auto_paste = auto_paste
         self.speed = speed
         self.toggle_mode = toggle_mode
+        self.hotkey = hotkey or "super+alt+space"
+        self.hotkey_parts = self._parse_hotkey(self.hotkey)
         self.output_file = output_file
         self.model = None
 
@@ -70,23 +75,125 @@ class StreamingSTTServer:
         # Output file handle
         self.output_stream = None
         if self.output_file:
-            self.output_stream = open(self.output_file, 'w', buffering=1)  # Line buffered
+            self.output_stream = open(
+                self.output_file, "w", buffering=1
+            )  # Line buffered
 
         # Streaming UI
         self.show_ui = show_ui
         self.streaming_ui = None
         if self.show_ui:
-            self.streaming_ui = create_streaming_ui(width_chars=ui_width, prefer_gui=True)
+            self.streaming_ui = create_streaming_ui(
+                width_chars=ui_width, prefer_gui=True
+            )
 
         # Pause detection for paragraph breaks
         self.pause_paragraph_breaks = pause_paragraph_breaks
         self.pause_detector = PauseDetector(
             silence_threshold_db=-40.0,
             min_pause_duration=pause_threshold_seconds,
-            sample_rate=16000
+            sample_rate=16000,
         )
         self.last_chunk_audio = None  # Store last chunk audio for pause detection
         self.recording_start_time = None  # Track when recording started
+
+    def _parse_hotkey(self, hotkey_str):
+        """Parse hotkey string into component parts."""
+        cleaned = (hotkey_str or "").replace("<", "").replace(">", "").lower()
+        parts = [p.strip() for p in cleaned.split("+") if p.strip()]
+        aliases = {
+            "control": "ctrl",
+            "option": "alt",
+            "command": "meta",
+            "cmd": "meta",
+            "super": "meta",
+            "win": "meta",
+            "windows": "meta",
+            "spacebar": "space",
+        }
+        normalized = [aliases.get(part, part) for part in parts]
+        modifiers = set()
+        keys = []
+        for part in normalized:
+            if part in ["ctrl", "alt", "shift", "meta"]:
+                modifiers.add(part)
+            else:
+                keys.append(part)
+        return {"modifiers": modifiers, "keys": keys}
+
+    def _check_hotkey_pressed(self):
+        """Check if the configured hotkey combination is currently pressed."""
+        modifiers_pressed = set()
+        if (
+            Key.ctrl_l in self.current_keys
+            or Key.ctrl in self.current_keys
+            or Key.ctrl_r in self.current_keys
+        ):
+            modifiers_pressed.add("ctrl")
+        if (
+            Key.alt_l in self.current_keys
+            or Key.alt in self.current_keys
+            or Key.alt_r in self.current_keys
+        ):
+            modifiers_pressed.add("alt")
+        if (
+            Key.shift_l in self.current_keys
+            or Key.shift in self.current_keys
+            or Key.shift_r in self.current_keys
+        ):
+            modifiers_pressed.add("shift")
+        if hasattr(Key, "cmd") and (
+            Key.cmd in self.current_keys
+            or Key.cmd_l in self.current_keys
+            or Key.cmd_r in self.current_keys
+        ):
+            modifiers_pressed.add("meta")
+
+        if modifiers_pressed != self.hotkey_parts["modifiers"]:
+            return False
+
+        if not self.hotkey_parts["keys"]:
+            return True
+
+        for required_key in self.hotkey_parts["keys"]:
+            key_found = False
+            try:
+                if keyboard.KeyCode.from_char(required_key) in self.current_keys:
+                    key_found = True
+                if required_key == "q" and keyboard.KeyCode.from_char("œ") in self.current_keys:
+                    key_found = True
+            except Exception:
+                pass
+
+            special_keys = {
+                "space": Key.space,
+                "return": Key.enter,
+                "enter": Key.enter,
+                "tab": Key.tab,
+                "backspace": Key.backspace,
+                "delete": Key.delete,
+                "home": Key.home,
+                "end": Key.end,
+                "pageup": Key.page_up,
+                "pagedown": Key.page_down,
+                "up": Key.up,
+                "down": Key.down,
+                "left": Key.left,
+                "right": Key.right,
+            }
+            if hasattr(Key, "insert"):
+                special_keys["insert"] = Key.insert
+
+            for i in range(1, 13):
+                special_keys[f"f{i}"] = getattr(Key, f"f{i}", None)
+
+            if required_key in special_keys and special_keys[required_key] in self.current_keys:
+                key_found = True
+
+            if not key_found:
+                return False
+
+        return True
 
     def _show_notification(self, title: str, message: str, timeout: int = 2):
         """Show cross-platform notification (non-blocking)."""
@@ -97,8 +204,8 @@ class StreamingSTTServer:
             notification.notify(
                 title=title,
                 message=message,
-                app_name='STT Server',
-                timeout=timeout  # seconds
+                app_name="STT Server",
+                timeout=timeout,  # seconds
             )
         except Exception:
             # Silently fail if notifications don't work
@@ -111,6 +218,18 @@ class StreamingSTTServer:
 
         # Force CPU usage
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
+        disable_torch_jit()
+
+        try:
+            import nemo.collections.asr as nemo_asr
+        except Exception as exc:
+            print("❌ Failed to import NeMo ASR.")
+            print(f"   Error: {exc}")
+            print(
+                "   If you're running a bundled binary, TorchScript may be blocked by"
+                " missing source files."
+            )
+            return False
 
         start_time = time.time()
         self.model = nemo_asr.models.ASRModel.from_pretrained(
@@ -121,6 +240,7 @@ class StreamingSTTServer:
 
         load_time = time.time() - start_time
         print(f"✓ Model loaded in {load_time:.2f} seconds\n")
+        return True
 
     def transcribe_chunk(self, chunk_np, chunk_id, is_last_chunk=False):
         """Transcribe a single audio chunk and merge with existing result."""
@@ -171,8 +291,12 @@ class StreamingSTTServer:
         - Process chunks as they arrive during recording
         """
         print("🔄 Streaming processor started")
-        print(f"   Window: {self.recorder.window_seconds}s, Slide: {self.recorder.slide_seconds}s")
-        print(f"   Overlap: {self.recorder.window_seconds - self.recorder.slide_seconds}s")
+        print(
+            f"   Window: {self.recorder.window_seconds}s, Slide: {self.recorder.slide_seconds}s"
+        )
+        print(
+            f"   Overlap: {self.recorder.window_seconds - self.recorder.slide_seconds}s"
+        )
 
         self.chunk_counter = 0
         self.chunk_merger.reset()
@@ -182,10 +306,14 @@ class StreamingSTTServer:
 
             if chunk_np is not None:
                 self.chunk_counter += 1
-                is_last = not self.is_transcribing and self.recorder.processing_queue.empty()
+                is_last = (
+                    not self.is_transcribing and self.recorder.processing_queue.empty()
+                )
 
                 # Transcribe this chunk
-                self.transcribe_chunk(chunk_np, self.chunk_counter, is_last_chunk=is_last)
+                self.transcribe_chunk(
+                    chunk_np, self.chunk_counter, is_last_chunk=is_last
+                )
             else:
                 # No chunk available yet
                 time.sleep(0.1)
@@ -195,23 +323,28 @@ class StreamingSTTServer:
     def _normalize_text(self, text):
         """Normalize text (same as chunk_merger)."""
         import re
+
         text = text.lower()
-        text = re.sub(r'[^\w\s]', '', text)
-        return ' '.join(text.split())
+        text = re.sub(r"[^\w\s]", "", text)
+        return " ".join(text.split())
 
-    def finalize_transcription(self):
-        """Finalize and output the complete transcription."""
-        # Get the smartly merged result
-        final_text = self.chunk_merger.get_result()
+    def _transcribe_full_recording(self, audio_file: str) -> str | None:
+        """Transcribe a full recording as a fallback."""
+        if self.model is None:
+            print("❌ Error: Model failed to load")
+            return None
+        try:
+            output = self.model.transcribe([audio_file], timestamps=False)
+            return output[0].text.strip()
+        except Exception as exc:
+            print(f"Error transcribing: {exc}")
+            return None
 
+    def _handle_final_text(self, final_text: str | None) -> bool:
+        """Print, copy, and optionally paste the final transcription."""
         if not final_text:
             print("No text transcribed")
-            self._show_notification(
-                "STT Server",
-                "No text transcribed",
-                timeout=2
-            )
-            return
+            return False
 
         print(f"\n{'=' * 60}")
         print("📝 Final Transcription:")
@@ -222,14 +355,6 @@ class StreamingSTTServer:
         # Copy to clipboard
         pyperclip.copy(final_text)
         print("✓ Copied to clipboard")
-
-        # Show notification IMMEDIATELY - don't wait!
-        preview = final_text[:50] + "..." if len(final_text) > 50 else final_text
-        self._show_notification(
-            "Copied to clipboard!",
-            preview,
-            timeout=2
-        )
 
         # Small delay to ensure notification shows before auto-paste
         time.sleep(0.1)
@@ -244,6 +369,13 @@ class StreamingSTTServer:
             print("✓ Auto-pasted")
 
         print()
+        return True
+
+    def finalize_transcription(self, final_text: str | None = None):
+        """Finalize and output the complete transcription."""
+        if final_text is None:
+            final_text = self.chunk_merger.get_result()
+        self._handle_final_text(final_text)
 
     def on_press(self, key):
         """Handle key press events."""
@@ -256,17 +388,7 @@ class StreamingSTTServer:
         except:
             pass
 
-        # Check for Alt+Q combination (simple and uncommon)
-        alt_pressed = Key.alt_l in self.current_keys or Key.alt in self.current_keys or Key.alt_r in self.current_keys
-
-        # Check for 'q' key (or 'œ' on macOS when Option+Q is pressed)
-        try:
-            q_pressed = (keyboard.KeyCode.from_char('q') in self.current_keys or
-                        keyboard.KeyCode.from_char('œ') in self.current_keys)
-        except:
-            q_pressed = False
-
-        hotkey_combo = alt_pressed and q_pressed
+        hotkey_combo = self._check_hotkey_pressed()
 
         if self.toggle_mode:
             # Toggle mode: press once to start, press again to stop
@@ -276,15 +398,22 @@ class StreamingSTTServer:
                 if not self.is_recording:
                     # Start recording
                     print("🔴 Recording started (press again to stop)")
-                    self.is_recording = True
                     self.chunk_counter = 0
-                    self.recording_start_time = time.time()  # Track start time for hybrid mode
+                    self.recording_start_time = (
+                        time.time()
+                    )  # Track start time for hybrid mode
 
+                    self.recorder.start_recording()
+                    if not self.recorder.is_recording:
+                        print("❌ Recording failed to start.")
+                        self.hotkey_pressed = False
+                        return
+
+                    self.is_recording = True
                     # Start streaming UI if enabled
                     if self.streaming_ui:
                         self.streaming_ui.start()
 
-                    self.recorder.start_recording()
                     self.is_transcribing = True
                     self.transcription_thread = threading.Thread(
                         target=self.streaming_transcription_loop
@@ -299,14 +428,20 @@ class StreamingSTTServer:
                 if not self.hotkey_pressed and not self.recorder.is_recording:
                     self.hotkey_pressed = True
                     self.chunk_counter = 0
-                    self.recording_start_time = time.time()  # Track start time for hybrid mode
+                    self.recording_start_time = (
+                        time.time()
+                    )  # Track start time for hybrid mode
+
+                    # Start recording
+                    self.recorder.start_recording()
+                    if not self.recorder.is_recording:
+                        print("❌ Recording failed to start.")
+                        self.hotkey_pressed = False
+                        return
 
                     # Start streaming UI if enabled
                     if self.streaming_ui:
                         self.streaming_ui.start()
-
-                    # Start recording
-                    self.recorder.start_recording()
 
                     # Start transcription loop
                     self.is_transcribing = True
@@ -322,6 +457,12 @@ class StreamingSTTServer:
 
         # Stop microphone input
         audio_file = self.recorder.stop_recording()
+        if not audio_file:
+            print("⚠️  No audio captured; skipping transcription.")
+            self.is_transcribing = False
+            if self.transcription_thread:
+                self.transcription_thread.join(timeout=2.0)
+            return
 
         # Get recording duration
         try:
@@ -339,49 +480,11 @@ class StreamingSTTServer:
             if self.transcription_thread:
                 self.transcription_thread.join(timeout=2.0)
 
-            # Transcribe the whole recording at once
-            try:
-                output = self.model.transcribe([audio_file], timestamps=False)
-                text = output[0].text.strip()
-
-                if text:
-                    print(f"\n📝 Transcribed: {text}\n")
-
-                    # Copy to clipboard immediately
-                    pyperclip.copy(text)
-                    print("✓ Copied to clipboard")
-
-                    # Show notification RIGHT AWAY
-                    preview = text[:50] + "..." if len(text) > 50 else text
-                    self._show_notification(
-                        "Copied to clipboard!",
-                        preview,
-                        timeout=2
-                    )
-
-                    # Auto-paste if enabled
-                    if self.auto_paste:
-                        time.sleep(0.2)
-                        self.keyboard_controller.press(Key.ctrl)
-                        self.keyboard_controller.press("v")
-                        self.keyboard_controller.release("v")
-                        self.keyboard_controller.release(Key.ctrl)
-                        print("✓ Auto-pasted")
-                else:
-                    print("No text transcribed")
-                    self._show_notification("STT Server", "No text transcribed", timeout=2)
-            except Exception as e:
-                print(f"Error transcribing: {e}")
+            text = self._transcribe_full_recording(audio_file)
+            self._handle_final_text(text)
 
         else:
             # Normal streaming mode - process buffered chunks
-            # Show notification that we're processing
-            self._show_notification(
-                "STT Server",
-                "Processing transcription...",
-                timeout=3
-            )
-
             # Signal transcription thread to finish processing queue
             self.is_transcribing = False
 
@@ -390,20 +493,17 @@ class StreamingSTTServer:
                 print("⏳ Processing remaining chunks...")
                 self.transcription_thread.join(timeout=30.0)
 
+            final_text = self.chunk_merger.get_result()
+            if not final_text:
+                print("⚠️  No chunks processed, transcribing whole file as fallback...")
+                final_text = self._transcribe_full_recording(audio_file)
+
             # Finalize and copy to clipboard
-            self.finalize_transcription()
+            self.finalize_transcription(final_text)
 
     def on_release(self, key):
         """Handle key release events."""
         if self.is_shutting_down:
-            return False
-
-        # Check for Esc to exit
-        if key == Key.esc:
-            print("\n👋 Shutting down...")
-            self.is_shutting_down = True
-            if self.output_stream:
-                self.output_stream.close()
             return False
 
         # Track released keys
@@ -414,15 +514,7 @@ class StreamingSTTServer:
             pass
 
         # Check if hotkey is released
-        alt_pressed = Key.alt_l in self.current_keys or Key.alt in self.current_keys or Key.alt_r in self.current_keys
-
-        try:
-            q_pressed = (keyboard.KeyCode.from_char('q') in self.current_keys or
-                        keyboard.KeyCode.from_char('œ') in self.current_keys)
-        except:
-            q_pressed = False
-
-        hotkey_combo = alt_pressed and q_pressed
+        hotkey_combo = self._check_hotkey_pressed()
 
         # Reset debounce when keys released (for toggle mode)
         if self.toggle_mode and not hotkey_combo:
@@ -445,27 +537,36 @@ class StreamingSTTServer:
         print(f"Speed: {self.speed}x")
         print(f"Chunk size: {self.recorder.window_seconds}s (context window)")
         print(f"Slide interval: {self.recorder.slide_seconds}s")
-        print(f"Overlap: {self.recorder.window_seconds - self.recorder.slide_seconds}s (for merging)")
+        print(
+            f"Overlap: {self.recorder.window_seconds - self.recorder.slide_seconds}s (for merging)"
+        )
         print(f"Start delay: {self.recorder.start_delay_seconds}s")
         if self.toggle_mode:
-            print("Hotkey: Alt+Q (Option+Q on macOS) - press once to start, again to stop")
+            print(
+                f"Hotkey: {self.hotkey} - press once to start, again to stop"
+            )
         else:
-            print("Hotkey: Alt+Q (Option+Q on macOS) - hold to record")
+            print(f"Hotkey: {self.hotkey} - hold to record")
         if self.output_file:
             print(f"Output file: {self.output_file} (streaming)")
-        print("Exit: Press Esc")
+        print("Exit: Ctrl+C")
         print("=" * 60)
 
         # Load model
-        self.load_model()
+        if not self.load_model():
+            return
 
         # Start keyboard listener
         try:
             if self.toggle_mode:
-                print("\n✓ Ready! Press Alt+Q (Option+Q on macOS) once to start recording.")
+                print(
+                    f"\n✓ Ready! Press {self.hotkey} once to start recording."
+                )
             else:
-                print("\n✓ Ready! Hold Alt+Q (Option+Q on macOS) to start recording.")
-            print(f"  Streaming will start after {self.recorder.start_delay_seconds}s\n")
+                print(f"\n✓ Ready! Hold {self.hotkey} to start recording.")
+            print(
+                f"  Streaming will start after {self.recorder.start_delay_seconds}s\n"
+            )
 
             with keyboard.Listener(
                 on_press=self.on_press, on_release=self.on_release

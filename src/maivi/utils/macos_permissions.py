@@ -9,7 +9,9 @@ import time
 from typing import Optional
 
 _CF_STRING_ENCODING_UTF8 = 0x08000100
-_APPLICATION_SERVICES = "/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices"
+_APPLICATION_SERVICES = (
+    "/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices"
+)
 _CORE_FOUNDATION = "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation"
 
 
@@ -103,7 +105,9 @@ def _prompt_accessibility(quartz: ctypes.CDLL) -> bool:
     return result
 
 
-def ensure_accessibility_permissions(prompt: bool = False, retry_delay: float = 0.5) -> bool:
+def ensure_accessibility_permissions(
+    prompt: bool = False, retry_delay: float = 0.5
+) -> bool:
     """Check (and optionally prompt for) macOS accessibility permission.
 
     Returns True when accessibility monitoring is already permitted or when the
@@ -140,14 +144,14 @@ def open_system_settings_privacy(anchor: str) -> bool:
     if not _is_macos() or not anchor:
         return False
 
-    script = f'''
+    script = f"""
     tell application "System Settings"
         activate
         try
             reveal anchor "{anchor}" of pane id "com.apple.preference.security"
         end try
     end tell
-    '''
+    """
 
     try:
         subprocess.run(

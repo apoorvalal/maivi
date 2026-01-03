@@ -2,6 +2,7 @@
 """
 CLI interface for STT server.
 """
+
 import argparse
 from maivi.cli.server import StreamingSTTServer
 
@@ -18,43 +19,31 @@ Examples:
   # Start server with auto-paste
   python cli.py --auto-paste
 
-  # Start with streaming mode (real-time transcription)
-  python cli.py --stream
-
-  # Streaming with auto-paste
-  python cli.py --stream --auto-paste
-
-  # Configure streaming parameters (optimized defaults: 7s window, 0.5s slide)
-  python cli.py --stream --window 7 --slide 0.5 --delay 6
-
   # Use speed adjustment (speak at normal speed, record at 2x)
   python cli.py --speed 2.0
 
-  # Combine speed with streaming
-  python cli.py --stream --speed 1.5
-
-  # Toggle mode (press once to start, again to stop)
-  python cli.py --stream --toggle
+  # Hold mode (hold hotkey to record)
+  python cli.py --hold
 
   # Stream to file for voice command detection
-  python cli.py --stream --output-file transcription.txt
+  python cli.py --output-file transcription.txt
 
   # Show live UI window with transcription (recommended!)
-  python cli.py --stream --toggle --show-ui
+  python cli.py --show-ui
 
   # Custom UI width
-  python cli.py --stream --show-ui --ui-width 50
+  python cli.py --show-ui --ui-width 50
 
-  # Full featured - toggle mode + UI + notifications
-  python cli.py --stream --toggle --show-ui --ui-width 50
+  # Full featured - toggle mode + UI
+  python cli.py --show-ui --ui-width 50
 
 Usage:
   1. Start the server
-  2. Hold Alt+Q (Option+Q on macOS) to record (or press once in toggle mode)
-  3. Release to stop and transcribe (or press again in toggle mode)
+  2. Press the hotkey once to start, again to stop (default)
+  3. Use --hold to record only while the hotkey is held
   4. Text is copied to clipboard
   5. If --auto-paste is enabled, text is pasted automatically
-  6. Press Esc to exit
+  6. Press Ctrl+C to exit
 
 Streaming Mode (SIMPLE OVERLAPPING CHUNKS):
   - Fixed 7s chunks with 4s overlap (3s slide)
@@ -76,7 +65,7 @@ Streaming Mode (SIMPLE OVERLAPPING CHUNKS):
         "-s",
         "--stream",
         action="store_true",
-        help="Enable streaming mode for real-time transcription",
+        help="Deprecated: streaming is always enabled",
     )
 
     parser.add_argument(
@@ -102,8 +91,8 @@ Streaming Mode (SIMPLE OVERLAPPING CHUNKS):
 
     parser.add_argument(
         "--hotkey",
-        default="<ctrl>+<alt>",
-        help="Hotkey combination (default: <ctrl>+<alt>)",
+        default="super+alt+space",
+        help="Hotkey combination (default: super+alt+space)",
     )
 
     parser.add_argument(
@@ -114,10 +103,9 @@ Streaming Mode (SIMPLE OVERLAPPING CHUNKS):
     )
 
     parser.add_argument(
-        "-t",
-        "--toggle",
+        "--hold",
         action="store_true",
-        help="Toggle mode: press once to start, press again to stop (default: hold mode)",
+        help="Hold mode: hold the hotkey to record (default: toggle)",
     )
 
     parser.add_argument(
@@ -131,7 +119,7 @@ Streaming Mode (SIMPLE OVERLAPPING CHUNKS):
     parser.add_argument(
         "--show-ui",
         action="store_true",
-        help="Show live transcription UI window (streaming mode only)",
+        help="Show live transcription UI window",
     )
 
     parser.add_argument(
@@ -158,6 +146,7 @@ Streaming Mode (SIMPLE OVERLAPPING CHUNKS):
 
     # Check for FFmpeg (optional but recommended for advanced audio processing)
     from maivi.utils.ffmpeg_installer import ensure_ffmpeg_installed
+
     ensure_ffmpeg_installed(silent=False)
     print()
 
@@ -168,7 +157,8 @@ Streaming Mode (SIMPLE OVERLAPPING CHUNKS):
         slide_seconds=args.slide,
         start_delay_seconds=args.delay,
         speed=args.speed,
-        toggle_mode=args.toggle,
+        toggle_mode=not args.hold,
+        hotkey=args.hotkey,
         output_file=args.output_file,
         show_ui=args.show_ui,
         ui_width=args.ui_width,

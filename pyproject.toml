@@ -10,7 +10,8 @@ readme = "README.md"
 requires-python = ">=3.10,<3.13"  # Python 3.13 not yet supported by NeMo
 license = {text = "MIT"}
 authors = [
-    {name = "Maxime Rivest"}
+    {name = "Maxime Rivest"},
+    { name = "Apoorva Lal"}
 ]
 keywords = ["speech-to-text", "voice", "transcription", "ai", "nemo"]
 classifiers = [
@@ -33,13 +34,13 @@ dependencies = [
     "sounddevice>=0.4.6",
     "soundfile>=0.12.0",
     "librosa>=0.10.0",
-    "numpy>=1.24.0,<2.0.0",
+    "numpy>=1.24.0",
     "pynput>=1.7.6",
     "pyperclip>=1.8.2",
     "plyer>=2.1.0",
     "torch>=2.0.0",
     "torchaudio>=2.0.0",
-    "ml-dtypes>=0.5.0,<0.6.0",  # Pin to avoid Python 3.13 compatibility issues
+    "ml-dtypes>=0.5.0",
     "platformdirs>=3.0.0",  # Cross-platform application directories
 ]
 
@@ -58,9 +59,9 @@ build = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/MaximeRivest/maivi"
-Repository = "https://github.com/MaximeRivest/maivi"
-Issues = "https://github.com/MaximeRivest/maivi/issues"
+Homepage = "https://github.com/apoorvalal/maivi"
+Repository = "https://github.com/apoorvalal/maivi"
+Issues = "https://github.com/apoorvalal/maivi/issues"
 
 [project.scripts]
 maivi = "maivi.__main__:main"
